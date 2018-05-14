@@ -130,7 +130,8 @@ class Battery(Resource):
 
         In keeping with the algorithm design, this is the "observation" of the master algorithm, ostensibly obtained
         from the previous setpoint request. So, although the actual SoC changed after the previous setpoint request,
-        we assume that the master algorithm does not know this yet.
+        we assume that the master algorithm does not know this yet. Thus, we update the self.SoC attribute after
+        calculating the feasible set based on the old value.
 
         :param cvxvar: a cvxpy.Variable instance
         :return: a list of cvxpy constraints
