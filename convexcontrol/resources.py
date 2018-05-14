@@ -80,7 +80,7 @@ class PVSys(Resource):
         return hull
 
     def projFeas(self, setpoint):
-        proj = lambda x: np.clip(x, 0, self.power_signal[self.t])
+        proj = np.clip(setpoint, 0, self.power_signal[self.t])
         return proj
 
 
