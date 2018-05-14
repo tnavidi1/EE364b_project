@@ -74,8 +74,8 @@ class PVSys(Resource):
         producer = True
         Resource.__init__(self, name, consumer, producer, cost_function, convex_hull, projection)
 
-    def convexHull(self, x):
-        hull = lambda x: [x >= 0, x <= self.power_signal[self.t]]
+    def convexHull(self, cvxvar):
+        hull = [cvxvar >= 0, cvxvar <= self.power_signal[self.t]]
         self.t += 1
         return hull
 
