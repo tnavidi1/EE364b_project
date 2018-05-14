@@ -69,7 +69,7 @@ class PVSys(Resource):
         self.Cpv = Cpv
         cost_function = lambda x: -Cpv * x
         convex_hull = lambda x: [x >= 0, x <= self.power_signal[self.t]]
-        self.projection = lambda x: np.clip(x, 0, self.power_signal[self.t])
+        projection = lambda x: np.clip(x, 0, self.power_signal[self.t])
         consumer = False
         producer = True
         Resource.__init__(self, name, consumer, producer, cost_function, convex_hull, projection)
@@ -82,3 +82,34 @@ class PVSys(Resource):
     def projFeas(self, setpoint):
         proj = lambda x: np.clip(x, 0, self.power_signal[self.t])
         return proj
+
+
+class Battery(Resource):
+
+    """ Battery Class
+
+    This implements a simple battery model. The state of charge is estimated by power input/output.
+
+    """
+
+
+    def __init__(self, name, Cb=10, pmax=50, pmin=-50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95, T=200):
+        consumer = True
+        producer = True
+        self.Cb = Cb
+        self.pmax = pmax
+        self.pmin = pmin
+        self.target_SoC = target_SoC
+        self.SoC = initial_SoC
+        self.capacity = capacity
+        self.eff = eff
+        def cost_function(x):
+            if self.SoC >= self.target_SoC:
+                cost = self.Cb * np.power(x - self.pmin, 2)
+            else:
+                cost = self.Cb * np.power(x - self.pmax, 2)
+            return cost
+        def convex_hull(x):
+            pass
+        projection = lambda x: np.clip(x, self.pmin, self.pmax)
+        Resource.__init__(name, consumer, producer, cost_function, convex_hull, projection)
