@@ -113,7 +113,7 @@ class Battery(Resource):
             else:
                 cost = self.Cb * np.power(x - self.pmax, 2)
             return cost
-        Resource.__init__(name, consumer, producer, cost_function)
+        Resource.__init__(self, name, consumer, producer, cost_function)
 
     def convexHull(self, cvxvar):
         """
