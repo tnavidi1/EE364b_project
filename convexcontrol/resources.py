@@ -102,7 +102,7 @@ class Battery(Resource):
         self.pmin = pmin
         self.target_SoC = target_SoC
         self.SoC = initial_SoC
-        self.Soc_next = None
+        self.SoC_next = None
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
@@ -138,7 +138,7 @@ class Battery(Resource):
         """
         pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
-        self.SoC = self.Soc_next
+        self.SoC = self.SoC_next
         return [cvxvar >= pmin, cvxvar <= pmax]
 
     def costFunc(self, cvxvar):
@@ -163,5 +163,5 @@ class Battery(Resource):
         pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
         sp = np.clip(setpoint, pmin, pmax)
-        self.Soc_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
+        self.SoC_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
         return sp
