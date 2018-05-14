@@ -103,15 +103,15 @@ class Battery(Resource):
         self.pmin = pmin
         self.target_SoC = target_SoC
         self.SoC = initial_SoC
-        self.SoC_next = None
+        self.SoC_next = initial_SoC
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
         def cost_function(x):
             if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x - self.pmin, 2)
+                cost = self.Cb * np.power(x - self.pmin, 2) # if above the desired SoC, try to discharge
             else:
-                cost = self.Cb * np.power(x - self.pmax, 2)
+                cost = self.Cb * np.power(x - self.pmax, 2) # if below the desired SoC, try to charge
             return cost
         Resource.__init__(self, name, consumer, producer, cost_function)
 
