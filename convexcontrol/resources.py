@@ -14,7 +14,7 @@ class Resource(object):
 
     """
 
-    def __init__(self, name, consumer, producer, cost_function, convex_hull, projection):
+    def __init__(self, name, consumer, producer, cost_function=None, convex_hull=None, projection=None):
         """
 
         :param name: (str) the name of the resource
@@ -34,13 +34,16 @@ class Resource(object):
         self.projection = projection
 
     def convexHull(self, cvxvar):
-        return self.convex_hull(cvxvar)
+        if self.convex_hull is not None:
+            return self.convex_hull(cvxvar)
 
     def costFunc(self, cvxvar):
-        return self.cost_function(cvxvar)
+        if self.cost_function is not None:
+            return self.cost_function(cvxvar)
 
     def projFeas(self, setpoint):
-        return self.projection(setpoint)
+        if self.projection is not None:
+            return self.projection(setpoint)
 
 
 class PVSys(Resource):
@@ -68,11 +71,9 @@ class PVSys(Resource):
         self.t = 0
         self.Cpv = Cpv
         cost_function = lambda x: -Cpv * x
-        convex_hull = lambda x: [x >= 0, x <= self.power_signal[self.t]]
-        projection = lambda x: np.clip(x, 0, self.power_signal[self.t])
         consumer = False
         producer = True
-        Resource.__init__(self, name, consumer, producer, cost_function, convex_hull, projection)
+        Resource.__init__(self, name, consumer, producer, cost_function)
 
     def convexHull(self, cvxvar):
         hull = [cvxvar >= 0, cvxvar <= self.power_signal[self.t]]
@@ -112,9 +113,7 @@ class Battery(Resource):
             else:
                 cost = self.Cb * np.power(x - self.pmax, 2)
             return cost
-        convex_hull = lambda x: [x >= pmin, x <= pmax]
-        projection = lambda x: np.clip(x, self.pmin, self.pmax)
-        Resource.__init__(name, consumer, producer, cost_function, convex_hull, projection)
+        Resource.__init__(name, consumer, producer, cost_function)
 
     def convexHull(self, cvxvar):
         """
@@ -140,13 +139,6 @@ class Battery(Resource):
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
         return [cvxvar >= pmin, cvxvar <= pmax]
-
-    def costFunc(self, cvxvar):
-        if self.SoC >= self.target_SoC:
-            cost = self.Cb * np.power(cvxvar - self.pmin, 2)
-        else:
-            cost = self.Cb * np.power(cvxvar - self.pmax, 2)
-        return cost
 
     def projFeas(self, setpoint):
         """
