@@ -93,7 +93,8 @@ class Battery(Resource):
     """
 
 
-    def __init__(self, name, Cb=10, pmax=50, pmin=-50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95, T=200):
+    def __init__(self, name, Cb=10, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
+                 tstep=1./60):
         consumer = True
         producer = True
         self.Cb = Cb
@@ -101,15 +102,65 @@ class Battery(Resource):
         self.pmin = pmin
         self.target_SoC = target_SoC
         self.SoC = initial_SoC
+        self.Soc_next = None
         self.capacity = capacity
         self.eff = eff
+        self.tstep = np.float(tstep)
         def cost_function(x):
             if self.SoC >= self.target_SoC:
                 cost = self.Cb * np.power(x - self.pmin, 2)
             else:
                 cost = self.Cb * np.power(x - self.pmax, 2)
             return cost
-        def convex_hull(x):
-            pass
+        convex_hull = lambda x: [x >= pmin, x <= pmax]
         projection = lambda x: np.clip(x, self.pmin, self.pmax)
         Resource.__init__(name, consumer, producer, cost_function, convex_hull, projection)
+
+    def convexHull(self, cvxvar):
+        """
+        The feasible set of power output (input) of the battery is defined not only by the physical limits self.pmin and
+        self.pmax, but also by the state of charge of the battery. The battery cannot source more power over a time step
+        than it has charge remaining, cannot accept more power over a time step than it has free SoC left. In other
+        words:
+
+            0 <= (SoC * capacity) - (power * time_step) / efficiency <= capacity
+
+        Note that we define positive power as generation. The more restrictive constraint is the one that must hold.
+        This set is already convex.
+
+        In keeping with the algorithm design, this is the "observation" of the master algorithm, ostensibly obtained
+        from the previous setpoint request. So, although the actual SoC changed after the previous setpoint request,
+        we assume that the master algorithm does not know this yet.
+
+        :param cvxvar: a cvxpy.Variable instance
+        :return: a list of cvxpy constraints
+        """
+        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
+        self.SoC = self.Soc_next
+        return [cvxvar >= pmin, cvxvar <= pmax]
+
+    def costFunc(self, cvxvar):
+        if self.SoC >= self.target_SoC:
+            cost = self.Cb * np.power(cvxvar - self.pmin, 2)
+        else:
+            cost = self.Cb * np.power(cvxvar - self.pmax, 2)
+        return cost
+
+    def projFeas(self, setpoint):
+        """
+        The feasible set is identical to the description given in self.ConvexHull. After the setpoint is implemented,
+        the state of charge of the battery changes according to
+
+        SoC_next = SoC - (power * time_step) / (efficiency * capacity)
+
+        We store this in the attribute self.SoC_next until the master algorithm
+
+        :param setpoint: (float) the requested power output (input) of the battery
+        :return:
+        """
+        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
+        sp = np.clip(setpoint, pmin, pmax)
+        self.Soc_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
+        return sp
