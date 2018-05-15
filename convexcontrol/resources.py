@@ -157,3 +157,16 @@ class Battery(Resource):
         sp = np.clip(setpoint, pmin, pmax)
         self.SoC_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
         return sp
+
+
+class TCL(Resource):
+
+    """
+
+    """
+
+    def __init__(self, name):
+        consumer = True
+        producer = False
+        self.locked = False
+        Resource.__init__(self, name, consumer, producer)
