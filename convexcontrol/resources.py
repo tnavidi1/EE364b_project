@@ -163,20 +163,35 @@ class TCL(Resource):
 
     """ Thermostatically Controlled Load Class
 
-    This extremely simply TCL model assumes a 2-stage HVAC system. The set point, p_set, represents the output of the
-    local thermostat control. The default class initialization synthesizes a time-series signal for p_set, representing
-    a simple thermostat control sequence.
+    This extremely simply TCL model assumes a 2-stage HVAC system. The set point, p_con, represents the output of
+    the local thermostat control. The default class initialization synthesizes a time-series signal for p_con,
+    representing a simple thermostat control sequence:
+
+
+            2 |             ------
+    p_con   1 |       ------
+            0 | ------            ------
+              |_______________________________
+                            t
+
+    The cost function for P1 is simply the square error loss between the optimal set point at time t and p_set[t],
+    multipylied by the constant Chvac. A large value for Chvac represents a low tolerance by the user to have their
+    HVAC settings changed. The feasible set is either {0,1,2} with the convex hull [0, 2], or simply {p_last} if the
+    system is locked, where p_last is last implemented power set point. We assume that the system becomes locked after
+    each change in implemented setpoint, for a predetermined number of steps, t_lock.
 
     """
 
-    def __init__(self, name, p_set='synthetic', T=200):
-        if p_set == 'synthetic'
-            self.p_set = np.zeros(T)
-            self.p_set[T/4:T/2] = 1
-            self.p_set[T/2:3*T/4] = 2
+    def __init__(self, name, Chvac=10, p_con='synthetic', T=200, t_lock=5):
+        if p_con == 'synthetic'
+            self.p_con = np.zeros(T)
+            self.p_con[T/4:T/2] = 1
+            self.p_con[T/2:3*T/4] = 2
         else:
             self.p_set = np.squeeze(np.array(p_set))
         consumer = True
         producer = False
+        self.t_lock = t_lock
         self.locked = False
+        cost_function = lambda x:
         Resource.__init__(self, name, consumer, producer)
