@@ -33,13 +33,13 @@ class Resource(object):
         self.convex_hull = convex_hull
         self.projection = projection
 
-    def convexHull(self, cvxvar):
-        if self.convex_hull is not None:
-            return self.convex_hull(cvxvar)
-
     def costFunc(self, cvxvar):
         if self.cost_function is not None:
             return self.cost_function(cvxvar)
+
+    def convexHull(self, cvxvar):
+        if self.convex_hull is not None:
+            return self.convex_hull(cvxvar)
 
     def projFeas(self, setpoint):
         if self.projection is not None:
@@ -163,7 +163,9 @@ class TCL(Resource):
 
     """ Thermostatically Controlled Load Class
 
-    This extremely simply TCL model assumes a 2-stage HVAC system. The set point, p_con, represents the output of
+    This extremely simply TCL model assumes a that the device has a maximum power at time t of p_max[t] and that the
+    possible setpoints are discrete and evenly distributed between 0 and p_max[t]. For example, a 2-stage HVAC system
+    might have the possible operating states {0kW, 10kW, 20kW}. The set point, p_con, represents the output of
     the local thermostat control. The default class initialization synthesizes a time-series signal for p_con,
     representing a simple thermostat control sequence:
 
@@ -182,16 +184,50 @@ class TCL(Resource):
 
     """
 
-    def __init__(self, name, Chvac=10, p_con='synthetic', T=200, t_lock=5):
-        if p_con == 'synthetic'
+    def __init__(self, name, Chvac=10, steps=2, pmax=-20,  p_con='simple', T=200, t_lock=5):
+        if p_con == 'simple':
             self.p_con = np.zeros(T)
             self.p_con[T/4:T/2] = 1
             self.p_con[T/2:3*T/4] = 2
         else:
-            self.p_set = np.squeeze(np.array(p_set))
+            self.p_con = np.squeeze(np.array(p_con))
         consumer = True
         producer = False
+        self.t = 0
+        self.states = range(steps+1)
+        self.step_size = pmax * 1. / steps
+        self.Chvac = Chvac
         self.t_lock = t_lock
+        self.timer = 0
         self.locked = False
-        cost_function = lambda x:
+        self.locked_next = False
+        self.p_last = None
         Resource.__init__(self, name, consumer, producer)
+
+    def costFunc(self, cvxvar):
+        cost = self.Chvac * np.power(cvxvar - self.p_con[self.t], 2)
+        return cost
+
+    def convexHull(self, cvxvar):
+        if not self.locked:
+            hull = [cvxvar >= np.min(self.states) * self.step_size, cvxvar <= np.max(self.states) * self.step_size]
+        else:
+            hull = [cvxvar == self.p_last]
+        self.locked = self.locked_next
+        self.t += 1
+        return hull
+
+    def projFeas(self, setpoint):
+        if not self.locked:
+            sp = np.round(np.clip(setpoint * 1. /  self.step_size, np.min(self.states), np.max(self.states)), 0)
+            sp *= self.step_size
+            if sp != self.p_last:
+                self.locked_next = True
+        else:
+            sp = self.p_last
+            self.timer += 1
+            if self.timer == self.t_lock:
+                self.locked_next = False
+                self.timer = 0
+        self.p_last = sp
+        return sp
