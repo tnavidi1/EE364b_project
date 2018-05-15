@@ -218,7 +218,8 @@ class TCL(Resource):
 
     def convexHull(self, cvxvar):
         if not self.locked:
-            hull = [cvxvar >= np.min(self.states) * self.step_size, cvxvar <= np.max(self.states) * self.step_size]
+            # Note that the 'max' power is a consumption and therefore negative
+            hull = [cvxvar <= np.min(self.states) * self.step_size, cvxvar >= np.max(self.states) * self.step_size]
         else:
             hull = [cvxvar == self.p_last]
         # update internal state
