@@ -213,7 +213,7 @@ class TCL(Resource):
         :param cvxvar: a cvxpy.Variable instance
         :return: a convex cvxpy expression
         """
-        cost = self.Chvac * np.power(cvxvar - self.p_con[self.t], 2)
+        cost = self.Chvac * np.power(cvxvar - self.p_con[self.t] * self.step_size, 2)
         return cost
 
     def convexHull(self, cvxvar):
