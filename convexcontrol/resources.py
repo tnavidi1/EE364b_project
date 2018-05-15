@@ -161,11 +161,21 @@ class Battery(Resource):
 
 class TCL(Resource):
 
-    """
+    """ Thermostatically Controlled Load Class
+
+    This extremely simply TCL model assumes a 2-stage HVAC system. The set point, p_set, represents the output of the
+    local thermostat control. The default class initialization synthesizes a time-series signal for p_set, representing
+    a simple thermostat control sequence.
 
     """
 
-    def __init__(self, name):
+    def __init__(self, name, p_set='synthetic', T=200):
+        if p_set == 'synthetic'
+            self.p_set = np.zeros(T)
+            self.p_set[T/4:T/2] = 1
+            self.p_set[T/2:3*T/4] = 2
+        else:
+            self.p_set = np.squeeze(np.array(p_set))
         consumer = True
         producer = False
         self.locked = False
