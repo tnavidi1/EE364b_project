@@ -205,6 +205,14 @@ class TCL(Resource):
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
+        """
+        Note that the impact of the local thermostat constrol signal is modeled as part of the cost function, not the
+        feasible set. We assume that the master algorithm has final say over what is implemented by the system,
+        but that the thermostat controller can impact that voice through the cost function.
+
+        :param cvxvar: a cvxpy.Variable instance
+        :return: a convex cvxpy expression
+        """
         cost = self.Chvac * np.power(cvxvar - self.p_con[self.t], 2)
         return cost
 
@@ -213,6 +221,7 @@ class TCL(Resource):
             hull = [cvxvar >= np.min(self.states) * self.step_size, cvxvar <= np.max(self.states) * self.step_size]
         else:
             hull = [cvxvar == self.p_last]
+        # update internal state
         self.locked = self.locked_next
         self.t += 1
         return hull
