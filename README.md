@@ -2,3 +2,6 @@
 
 Thomas Navidi, Xiao Chen, and Bennet Meyers
 
+Make Anaconda environment for the project:
+
+conda create --name myenv --file spec-file.txt
