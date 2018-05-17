@@ -34,10 +34,12 @@ class Resource(object):
         self.projection = projection
 
     def costFunc(self, cvxvar):
+        # output should be a single item not inside a list
         if self.cost_function is not None:
             return self.cost_function(cvxvar)
 
     def convexHull(self, cvxvar):
+        # Output should be inside a list
         if self.convex_hull is not None:
             return self.convex_hull(cvxvar)
 
@@ -225,7 +227,7 @@ class TCL(Resource):
         else:
             hull = [cvxvar == self.p_last]
         # update internal state
-        #self.locked = self.locked_next
+        self.locked = self.locked_next
         self.t += 1
         return hull
 
@@ -242,5 +244,5 @@ class TCL(Resource):
                 self.locked_next = False
                 self.timer = 0
         self.p_last = sp
-        self.locked = self.locked_next
+        #self.locked = self.locked_next
         return sp

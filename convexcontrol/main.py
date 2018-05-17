@@ -46,18 +46,10 @@ class Controller(object):
 		# gather all resources objective function and constraints
 		for i in range(N):
 			obj_part = self.resource_list[i].costFunc(p[i])
-			if isinstance(obj_part, list): # if there is a list of cvx expressions
-				for exp in obj_part: # flatten the list
-					obj.append(exp)
-			else:
-				obj.append(obj_part)
+			obj.append(obj_part)
 			
 			constraints_part = self.resource_list[i].convexHull(p[i])
-			if isinstance(constraints_part, list):
-				for exp in constraints_part:
-					constraints.append(exp)
-			else:
-				constraints.append(constraints_part)
+			constraints.extend(constraints_part)
 
 		# form and solve problem
 		obj_final = cvx.Minimize( sum(obj) )
