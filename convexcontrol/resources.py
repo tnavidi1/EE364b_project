@@ -34,10 +34,12 @@ class Resource(object):
         self.projection = projection
 
     def costFunc(self, cvxvar):
+        # output should be a single item not inside a list
         if self.cost_function is not None:
             return self.cost_function(cvxvar)
 
     def convexHull(self, cvxvar):
+        # Output should be inside a list
         if self.convex_hull is not None:
             return self.convex_hull(cvxvar)
 
@@ -64,8 +66,9 @@ class PVSys(Resource):
         :param pmax: if data is set to 'random', this is the maximum possible power output of the system
         :param T: if data is set to 'random' this is the number of random data point to generate
         """
-        if data == 'random':
-            self.power_signal = np.random.uniform(0, pmax, T)
+        if isinstance(data, str):
+            if data == 'random':
+                self.power_signal = np.random.uniform(0, pmax, T)
         else:
             self.power_signal = np.squeeze(np.array(data))
         self.t = 0
@@ -109,9 +112,9 @@ class Battery(Resource):
         self.tstep = np.float(tstep)
         def cost_function(x):
             if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x - self.pmin, 2) # if above the desired SoC, try to discharge
+                cost = self.Cb * np.power(x - self.pmax, 2) # if above the desired SoC, try to discharge
             else:
-                cost = self.Cb * np.power(x - self.pmax, 2) # if below the desired SoC, try to charge
+                cost = self.Cb * np.power(x - self.pmin, 2) # if below the desired SoC, try to charge
             return cost
         Resource.__init__(self, name, consumer, producer, cost_function)
 
@@ -185,10 +188,11 @@ class TCL(Resource):
     """
 
     def __init__(self, name, Chvac=10, steps=2, pmax=-20,  p_con='simple', T=200, t_lock=5):
-        if p_con == 'simple':
-            self.p_con = np.zeros(T)
-            self.p_con[T/4:T/2] = 1
-            self.p_con[T/2:3*T/4] = 2
+        if isinstance(p_con, str):
+            if p_con == 'simple':
+                self.p_con = np.zeros(T)
+                self.p_con[int(T/4):int(T/2)] = 1
+                self.p_con[int(T/2):int(3*T/4)] = 2
         else:
             self.p_con = np.squeeze(np.array(p_con))
         consumer = True
@@ -201,7 +205,7 @@ class TCL(Resource):
         self.timer = 0
         self.locked = False
         self.locked_next = False
-        self.p_last = None
+        self.p_last = np.nan
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
@@ -240,4 +244,5 @@ class TCL(Resource):
                 self.locked_next = False
                 self.timer = 0
         self.p_last = sp
+        #self.locked = self.locked_next
         return sp
