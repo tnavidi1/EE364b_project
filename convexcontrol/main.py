@@ -3,10 +3,13 @@
 This module contains the the main controller algorithm.
 """
 
-import numpy as np 
+import numpy as np
+import pandas as pd
 import cvxpy as cvx
 import matplotlib.pyplot as plt
 import time
+
+from convexcontrol.resources import Battery
 
 class Controller(object):
     """
@@ -35,8 +38,32 @@ class Controller(object):
         self.N = len(self.resource_list)
         self.err = np.zeros(self.N)
 
-    def runSimulation(self, pcc_signal, error_diffusion=True):
-        pass
+    def runSimulation(self, pcc_signal, error_diffusion=True, solver='ECOS'):
+        batteries = np.arange(self.N)[[isinstance(r, Battery) for r in  self.resource_list]]
+        cols = ['PCC req', 'PCC imp', 'eps']
+        cols.extend([n + ' SoC' for n in np.array(self.resource_names)[batteries]])
+        cols.extend([r + ' req' for r in self.resource_names])
+        cols.extend([r + ' imp' for r in self.resource_names])
+        output = pd.DataFrame(columns=cols, index=range(len(pcc_signal)))
+        for t in range(len(pcc_signal)):
+            self.solveStep(pcc_signal[t], solver=solver)
+            output.loc[t]['PCC req'] = np.sum(self.p_requested)
+            output.loc[t]['eps'] = self.eps
+            if error_diffusion:
+                self.getProjectionsWithError()
+            else:
+                self.getProjectionsNoError()
+            for i in range(self.N):
+                key1 = self.resource_names[i] + ' req'
+                key2 = self.resource_names[i] + ' imp'
+                output.loc[t][key1] = self.p_requested[i]
+                output.loc[t][key2] = self.p_operating[i]
+
+            output.loc[t]['PCC imp'] = np.sum(self.p_operating)
+            for j in batteries:
+                key = self.resource_names[j] + ' SoC'
+                output.loc[t][key] = np.float(self.resource_list[j].SoC)
+        return output
 
     def solveStep(self, agg_point, solver='ECOS'):
         """
