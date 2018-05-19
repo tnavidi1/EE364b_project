@@ -51,6 +51,7 @@ class Controller(object):
             output.loc[t]['eps'] = self.eps
             if error_diffusion:
                 self.getProjectionsWithError()
+                self.updateError()
             else:
                 self.getProjectionsNoError()
             for i in range(self.N):
