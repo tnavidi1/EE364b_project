@@ -29,7 +29,7 @@ class Controller(object):
 		self.N = len(self.resource_list)
 		self.err = np.zeros((self.N,1))
 
-	def solveStep(self,agg_point):
+	def solveStep(self,agg_point,solver='ECOS'):
 		"""
 		takes the aggregated set point and 
 		outputs power operating point for each resource and objective value
@@ -58,7 +58,7 @@ class Controller(object):
 		# form and solve problem
 		obj_final = cvx.Minimize( sum(obj) )
 		prob = cvx.Problem(obj_final, constraints)
-		prob.solve()
+		prob.solve(solver=solver)
 
 		if prob.status != 'optimal':
 			print('Problem status is: ',prob.status)
