@@ -24,13 +24,19 @@ class Controller(object):
         self.resource_names = resource_names
         self.mu = mu
         self.N = len(self.resource_list)
-        self.err = np.zeros((self.N,1))
+        self.err = np.zeros(self.N)
+        self.p_requested = None
+        self.eps = None
+        self.prob_val = None
 
     def addResource(self,resource):
         self.resource_list.append(resource)
         self.resource_names.append(resource.name)
         self.N = len(self.resource_list)
-        self.err = np.zeros((self.N,1))
+        self.err = np.zeros(self.N)
+
+    def runSimulation(self, pcc_signal, error_diffusion=True):
+
 
     def solveStep(self,agg_point,solver='ECOS'):
         """
@@ -69,20 +75,17 @@ class Controller(object):
         else:
             p_out = p.value
 
-        return p_out, eps.value, prob.value
+        self.p_requested = p_out.A1
+        self.eps = eps.value
+        self.prob_val = prob.value
 
-    def updateError(self, p_conv, p_operating):
-        self.err = self.err + p_operating - p_conv
+    def updateError(self):
+        self.err = self.err +self.p_operating - self.p_requested
 
-    def getProjectionsWithError(self,p_conv):
-        if self.N == 1:
-            p_operating = self.resource_list[0].projFeas(p_conv-self.err)
-        else:
-            p_operating = np.zeros((self.N,1))
-            for i in range(self.N):
-                p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:] - self.err[i,:])
-
-        return p_operating
+    def getProjectionsWithError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i] - self.err[i]) for i in range(self.N)])
+        self.p_operating = p_operating
 
     def getProjectionsNoError(self,p_conv):
         if self.N == 1:
