@@ -36,9 +36,9 @@ class Controller(object):
         self.err = np.zeros(self.N)
 
     def runSimulation(self, pcc_signal, error_diffusion=True):
+        pass
 
-
-    def solveStep(self,agg_point,solver='ECOS'):
+    def solveStep(self, agg_point, solver='ECOS'):
         """
         takes the aggregated set point and
         outputs power operating point for each resource and objective value
@@ -50,7 +50,7 @@ class Controller(object):
         p = cvx.Variable(N)
         eps = cvx.Variable(1)
 
-        # define aggragate tracking objective and constraint
+        # define aggregate tracking objective and constraint
         obj = [self.mu*eps]
         constraints = [cvx.sum_entries(p) <= agg_point + eps,
                         agg_point - eps <= cvx.sum_entries(p),
@@ -87,15 +87,10 @@ class Controller(object):
         p_operating = np.array([self.resource_list[i].projFeas(p_req[i] - self.err[i]) for i in range(self.N)])
         self.p_operating = p_operating
 
-    def getProjectionsNoError(self,p_conv):
-        if self.N == 1:
-            p_operating = self.resource_list[0].projFeas(p_conv)
-        else:
-            p_operating = np.zeros((self.N,1))
-            for i in range(contr.N):
-                p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:])
-
-        return p_operating
+    def getProjectionsNoError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i]) for i in range(self.N)])
+        self.p_operating = p_operating
 
 if __name__ == '__main__':
     from resources import *
