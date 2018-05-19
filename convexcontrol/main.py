@@ -3,10 +3,13 @@
 This module contains the the main controller algorithm.
 """
 
-import numpy as np 
+import numpy as np
+import pandas as pd
 import cvxpy as cvx
 import matplotlib.pyplot as plt
 import time
+
+from convexcontrol.resources import Battery
 
 class Controller(object):
     """
@@ -24,15 +27,46 @@ class Controller(object):
         self.resource_names = resource_names
         self.mu = mu
         self.N = len(self.resource_list)
-        self.err = np.zeros((self.N,1))
+        self.err = np.zeros(self.N)
+        self.p_requested = None
+        self.eps = None
+        self.prob_val = None
 
     def addResource(self,resource):
         self.resource_list.append(resource)
         self.resource_names.append(resource.name)
         self.N = len(self.resource_list)
-        self.err = np.zeros((self.N,1))
+        self.err = np.zeros(self.N)
 
-    def solveStep(self,agg_point,solver='ECOS'):
+    def runSimulation(self, pcc_signal, error_diffusion=True, solver='ECOS'):
+        batteries = np.arange(self.N)[[isinstance(r, Battery) for r in  self.resource_list]]
+        cols = ['PCC req', 'PCC imp', 'eps']
+        cols.extend([n + ' SoC' for n in np.array(self.resource_names)[batteries]])
+        cols.extend([r + ' req' for r in self.resource_names])
+        cols.extend([r + ' imp' for r in self.resource_names])
+        output = pd.DataFrame(columns=cols, index=range(len(pcc_signal)))
+        for t in range(len(pcc_signal)):
+            self.solveStep(pcc_signal[t], solver=solver)
+            output.loc[t]['PCC req'] = np.sum(self.p_requested)
+            output.loc[t]['eps'] = self.eps
+            if error_diffusion:
+                self.getProjectionsWithError()
+                self.updateError()
+            else:
+                self.getProjectionsNoError()
+            for i in range(self.N):
+                key1 = self.resource_names[i] + ' req'
+                key2 = self.resource_names[i] + ' imp'
+                output.loc[t][key1] = self.p_requested[i]
+                output.loc[t][key2] = self.p_operating[i]
+
+            output.loc[t]['PCC imp'] = np.sum(self.p_operating)
+            for j in batteries:
+                key = self.resource_names[j] + ' SoC'
+                output.loc[t][key] = np.float(self.resource_list[j].SoC)
+        return output
+
+    def solveStep(self, agg_point, solver='ECOS'):
         """
         takes the aggregated set point and
         outputs power operating point for each resource and objective value
@@ -44,7 +78,7 @@ class Controller(object):
         p = cvx.Variable(N)
         eps = cvx.Variable(1)
 
-        # define aggragate tracking objective and constraint
+        # define aggregate tracking objective and constraint
         obj = [self.mu*eps]
         constraints = [cvx.sum_entries(p) <= agg_point + eps,
                         agg_point - eps <= cvx.sum_entries(p),
@@ -69,30 +103,22 @@ class Controller(object):
         else:
             p_out = p.value
 
-        return p_out, eps.value, prob.value
+        self.p_requested = p_out.A1
+        self.eps = eps.value
+        self.prob_val = prob.value
 
-    def updateError(self, p_conv, p_operating):
-        self.err = self.err + p_operating - p_conv
+    def updateError(self):
+        self.err = self.err +self.p_operating - self.p_requested
 
-    def getProjectionsWithError(self,p_conv):
-        if self.N == 1:
-            p_operating = self.resource_list[0].projFeas(p_conv-self.err)
-        else:
-            p_operating = np.zeros((self.N,1))
-            for i in range(self.N):
-                p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:] - self.err[i,:])
+    def getProjectionsWithError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i] - self.err[i]) for i in range(self.N)])
+        self.p_operating = p_operating
 
-        return p_operating
-
-    def getProjectionsNoError(self,p_conv):
-        if self.N == 1:
-            p_operating = self.resource_list[0].projFeas(p_conv)
-        else:
-            p_operating = np.zeros((self.N,1))
-            for i in range(contr.N):
-                p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:])
-
-        return p_operating
+    def getProjectionsNoError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i]) for i in range(self.N)])
+        self.p_operating = p_operating
 
 if __name__ == '__main__':
     from resources import *
