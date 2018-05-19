@@ -4,14 +4,16 @@ This module contains the the main controller algorithm.
 """
 
 import numpy as np 
-import cvxpy as cvx 
+import cvxpy as cvx
+import matplotlib.pyplot as plt
+import time
 
 class Controller(object):
 	"""
 	main controller object
 	"""
 
-	def __init__(self, resource_list=[], mu=1):
+	def __init__(self, resource_list=[], mu=100):
 		self.resource_list = resource_list
 		resource_names = []
 		for resource in resource_list:
@@ -19,11 +21,13 @@ class Controller(object):
 		self.resource_names = resource_names
 		self.mu = mu
 		self.N = len(self.resource_list)
+		self.err = np.zeros((self.N,1))
 
 	def addResource(self,resource):
 		self.resource_list.append(resource)
 		self.resource_names.append(resource.name)
 		self.N = len(self.resource_list)
+		self.err = np.zeros((self.N,1))
 
 	def solveStep(self,agg_point):
 		"""
@@ -64,17 +68,41 @@ class Controller(object):
 
 		return p_out, eps.value, prob.value
 
+	def updateError(self, p_conv, p_operating):
+		self.err = self.err + p_operating - p_conv
+
+	def getProjectionsWithError(self,p_conv):
+		if self.N == 1:
+			p_operating = self.resource_list[0].projFeas(p_conv-self.err)
+		else:
+			p_operating = np.zeros((self.N,1))
+			for i in range(self.N):
+				p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:] - self.err[i,:])
+
+		return p_operating
+
+	def getProjectionsNoError(self,p_conv):
+		if self.N == 1:
+			p_operating = self.resource_list[0].projFeas(p_conv)
+		else:
+			p_operating = np.zeros((self.N,1))
+			for i in range(contr.N):
+				p_operating[i,:] = self.resource_list[i].projFeas(p_conv[i,:])
+
+		return p_operating
+
 if __name__ == '__main__':
 	from resources import *
 
 	# define constants
-	mu = 100
-	agg_point = np.array([20, 20, 0, -10])
+	mu = 10000
+	agg_point = np.concatenate((np.zeros(10),10*np.ones(30),-6*np.arange(10)+10,-50*np.ones(15),15*np.ones(7),np.zeros(8),10*np.ones(20),-10*np.ones(99)))
+	T = len(agg_point)
 
 	# define resources
 	tcl = TCL('tcl1')
-	pv = PVSys('pv1', data=np.array([10, 20, 20, 0, 0]))
-	batt1 = Battery('batt1')
+	pv = PVSys('pv1')
+	batt1 = Battery('batt1', initial_SoC=0.5,target_SoC=0.2)
 
 	# make controller
 	contr = Controller(mu=mu)
@@ -85,44 +113,37 @@ if __name__ == '__main__':
 	contr.addResource(batt1)
 
 	print('resource names: ',contr.resource_names)
+	print('total time horizon: ', T)
+
+	p_conv_all = np.zeros((contr.N,T))
+	p_op_all = np.zeros((contr.N,T))
+	eps_conv_all = np.zeros((1,T))
+
+	start_time = time.time()
 
 	for t in range(len(agg_point)):
 		# solve optimization for a single step
-		p_star, eps_star, opt_val = contr.solveStep(agg_point[t])
-		print(p_star)
-		print(eps_star)
-		print(opt_val)
+		p_conv, eps_conv, opt_val = contr.solveStep(agg_point[t])
 
-		if contr.N == 1:
-			p_operating = contr.resource_list[0].projFeas(p_star)
-		else:
-			p_operating = np.zeros((contr.N,1))
-			for i in range(contr.N):
-				p_operating[i,:] = contr.resource_list[i].projFeas(p_star[i,:])
+		# get projections onto feasible set
+		p_operating = contr.getProjectionsWithError(p_conv)
 
-		print('actual operating power:', p_operating)
-		print('battery SoC: ', contr.resource_list[2].SoC)
+		# update error term
+		contr.updateError(p_conv,p_operating)
 
+		# place data into arrays
+		p_conv_all[:,t] = p_conv.flatten()
+		p_op_all[:,t] = p_operating.flatten()
+		eps_conv_all[:,t] = eps_conv
 
+	print('total comp time: ',time.time() - start_time)
 
-	"""
-	Notes:
-		Resource comparing if data is string first to prevent elementwise comparison warning
-		
-		Battery discharging should be positive since positive is for generation and negative is for consumption
-			Just switch pmin and pmax since SoC is already made so discharging is positive
-		
-		make p_last = np.nan instead of None to remove future warning about comparison to None
-		self.locked needs to be set to self.locked_next after doing the projection or the hull on the next step will not have been updated
-
-
-		Artifact of time delay:
-		PV wants to output 20 but thinks it can only output 10 since current time max is 10
-		Next time step: turns out it could have done 20. still only outputs 10.
-		Is there any way to improve this or is this just an inevitable consequence of stochastic nature?
-			We don't want the convex opt to think there is extra flexibility when there will not be
-			We don't want the actual output to be limited if it turns out there is capability
-		First thought: Probably no simple way around this since convex opt will change other devices we do not want to change PV at the last minute
-	"""
+	plt.figure()
+	plt.plot(np.sum(p_op_all,axis=0))
+	plt.plot(agg_point)
+	plt.figure()
+	plt.plot(np.sum(p_conv_all,axis=0))
+	plt.plot(agg_point)
+	plt.show()
 
 
