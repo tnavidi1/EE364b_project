@@ -4,6 +4,7 @@ This module contains energy resource classes.
 """
 
 import numpy as np
+import cvxpy as cvx
 
 
 class Resource(object):
@@ -87,6 +88,54 @@ class PVSys(Resource):
         proj = np.clip(setpoint, 0, self.power_signal[self.t])
         return proj
 
+class PVSysR2(Resource):
+
+    """ PV System Class in R2
+
+	This class represents a solar PV generator with real and reactive power control. It can accept an pre-recorded power
+	signal or can generate power randomly, as a worst-case scenario of the stochastic nature of the resource.
+
+	"""
+
+    def __init__(self, name, Cpv=10, data='random', pmax=30, T=200):
+        """
+
+        :param name: (str) the name of the resource
+        :param Cpv:  (float) the constant associated with PV cost function
+        :param data: a 1-D array or similar representing a PV power signal (optional)
+        :param pmax: the maximum possible power output of the system, defines the feasible set in R2
+        :param T: if data is set to 'random' this is the number of random data point to generate
+        """
+        if isinstance(data, str):
+            if data == 'random':
+                self.power_signal = np.random.uniform(0, pmax, T)
+        else:
+            self.power_signal = np.squeeze(np.array(data))
+        self.pmax = pmax
+        self.t = 0
+        self.Cpv = Cpv
+        cost_function = lambda x: -Cpv * x[0]
+        consumer = False
+        producer = True
+        Resource.__init__(self, name, consumer, producer, cost_function)
+
+    def convexHull(self, cvxvar):
+        hull = [
+            cvxvar[0] >= 0,
+            cvxvar[0] <= self.power_signal[self.t],
+            cvx.norm(cvxvar, 2) <= self.pmax
+        ]
+        self.t += 1
+        return hull
+
+    def projFeas(self, setpoint):
+        proj0 = np.clip(setpoint[0], 0, self.power_signal[self.t])
+        if np.linalg.norm((proj0, setpoint[1])) <= self.pmax:
+            proj = np.array((proj0, setpoint[1]))
+        else:
+            proj1 = np.sign(setpoint[1]) * np.sqrt(self.pmax ** 2 - proj0 ** 2)
+            proj = np.array((proj0, proj1))
+        return proj
 
 class Battery(Resource):
 
