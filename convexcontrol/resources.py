@@ -4,6 +4,7 @@ This module contains energy resource classes.
 """
 
 import numpy as np
+import cvxpy as cvx
 
 
 class Resource(object):
@@ -246,3 +247,229 @@ class TCL(Resource):
         self.p_last = sp
         #self.locked = self.locked_next
         return sp
+
+
+class PVSysR2(Resource):
+
+    """ PV System Class in R2
+    This class represents a solar PV generator with real and reactive power control. It can accept an pre-recorded power
+    signal or can generate power randomly, as a worst-case scenario of the stochastic nature of the resource.
+    """
+
+    def __init__(self, name, Cpv=10, data='random', pmax=30, T=200):
+        """
+        :param name: (str) the name of the resource
+        :param Cpv:  (float) the constant associated with PV cost function
+        :param data: a 1-D array or similar representing a PV power signal (optional)
+        :param pmax: the maximum possible power output of the system, defines the feasible set in R2
+        :param T: if data is set to 'random' this is the number of random data point to generate
+        """
+        if isinstance(data, str):
+            if data == 'random':
+                self.power_signal = np.random.uniform(0, pmax, T)
+        else:
+            self.power_signal = np.squeeze(np.array(data))
+        self.pmax = pmax
+        self.t = 0
+        self.Cpv = Cpv
+        cost_function = lambda x: -Cpv * x[0]
+        consumer = False
+        producer = True
+        Resource.__init__(self, name, consumer, producer, cost_function)
+
+    def convexHull(self, cvxvar):
+        hull = [
+            cvxvar[0] >= 0,
+            cvxvar[0] <= self.power_signal[self.t],
+            cvx.norm(cvxvar, 2) <= self.pmax
+        ]
+        self.t += 1
+        return hull
+
+    def projFeas(self, setpoint):
+        proj0 = np.clip(setpoint[0], 0, self.power_signal[self.t])
+        if np.linalg.norm((proj0, setpoint[1])) <= self.pmax:
+            proj = np.array((proj0, setpoint[1]))
+        else:
+            proj1 = np.sign(setpoint[1]) * np.sqrt(self.pmax ** 2 - proj0 ** 2)
+            proj = np.array((proj0, proj1))
+        return proj
+
+
+class BatteryR2(Resource):
+
+    """ Battery Class
+    This implements a simple battery model. The state of charge is estimated by power input/output.
+    """
+
+
+    def __init__(self, name, Cb=10, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
+                 tstep=1./60):
+        consumer = True
+        producer = True
+        self.Cb = Cb
+        self.pmax = pmax
+        self.pmin = pmin
+        self.target_SoC = target_SoC
+        self.SoC = initial_SoC
+        self.SoC_next = initial_SoC
+        self.capacity = capacity
+        self.eff = eff
+        self.tstep = np.float(tstep)
+        def cost_function(x):
+            if self.SoC >= self.target_SoC:
+                cost = self.Cb * np.power(x[0] - self.pmax, 2) # if above the desired SoC, try to discharge
+            else:
+                cost = self.Cb * np.power(x[0] - self.pmin, 2) # if below the desired SoC, try to charge
+            return cost
+        Resource.__init__(self, name, consumer, producer, cost_function)
+
+    def convexHull(self, cvxvar):
+        """
+        The feasible set of power output (input) of the battery is defined not only by the physical limits self.pmin and
+        self.pmax, but also by the state of charge of the battery. The battery cannot source more power over a time step
+        than it has charge remaining, cannot accept more power over a time step than it has free SoC left. In other
+        words:
+            0 <= (SoC * capacity) - (power * time_step) / efficiency <= capacity
+        Note that we define positive power as generation. The more restrictive constraint is the one that must hold.
+        This set is already convex.
+        In keeping with the algorithm design, this is the "observation" of the master algorithm, ostensibly obtained
+        from the previous setpoint request. So, although the actual SoC changed after the previous setpoint request,
+        we assume that the master algorithm does not know this yet. Thus, we update the self.SoC attribute after
+        calculating the feasible set based on the old value.
+        :param cvxvar: a cvxpy.Variable instance
+        :return: a list of cvxpy constraints
+        """
+        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
+        self.SoC = self.SoC_next
+        return [
+            cvxvar[0] >= pmin,
+            cvxvar[0] <= pmax,
+            cvx.norm(cvxvar, 2) <= self.pmax
+        ]
+
+    def projFeas(self, setpoint):
+        """
+        The feasible set is identical to the description given in self.ConvexHull. After the setpoint is implemented,
+        the state of charge of the battery changes according to
+        SoC_next = SoC - (power * time_step) / (efficiency * capacity)
+        We store this in the attribute self.SoC_next until the master algorithm
+        :param setpoint: (float) the requested power output (input) of the battery
+        :return:
+        """
+        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
+        sp0 = np.clip(setpoint[0], pmin, pmax)
+        self.SoC_next = self.SoC - sp0 * self.tstep / (self.capacity * self.eff)
+        if np.linalg.norm((sp0, setpoint[1])) <= self.pmax:
+            sp = np.array((sp0, setpoint[1]))
+        else:
+            sp1 = np.sign(setpoint[1]) * np.sqrt(self.pmax ** 2 - sp0 ** 2)
+            sp = np.array((sp0, sp1))
+        return sp
+
+class DiscreteR2(Resource):
+    """ Discrete operating modes device
+    Device can output power from a collection of any points
+    """
+
+    def __init__(self, name, points = np.array([[-10,-5], [-20, -10], [-30, -20]]), desired = np.zeros(200,dtype=int), Cdisc=10, t_lock=5):
+        from scipy.spatial import ConvexHull
+
+        points = np.array(points, dtype=float) # set of points in np array shape (points, dim=2)
+        self.points = points
+        self.desired = desired # list of desired operating points ex. [1, 2, 4, 0] corresponds to row of points array
+        modes, dim = points.shape
+        self.modes = modes # number of operating mfodes (points)
+
+        if modes > 2:
+            try:
+                ch = ConvexHull(points) # make convex hull object of points
+                hull_mat = ch.equations
+                self.A = hull_mat[:,0:2]
+                self.b = hull_mat[:,2]
+                self.set_dim = 2 # 2 for polygon, 1 for line, 0 for point
+            except:
+                print('Discrete resource points lie on a line')
+                self.set_dim = 1
+                ind1 = np.argmin(points[:,0])
+                ind2 = np.argmax(points[:,0])
+                p1 = points[ind1,:]
+                p2 = points[ind2,:]
+                self.min0 = np.minimum(p1[0],p2[0])
+                self.max0 = np.maximum(p1[0],p2[0])
+                self.c = (p2[1]-p1[1])/(p2[0] - p1[0])
+                self.a = p1[0]
+                self.b = p1[1]
+
+        elif modes == 2:
+            self.set_dim = 1
+            p1 = points[0,:]
+            p2 = points[1,:]
+            self.min0 = np.minimum(p1[0],p2[0])
+            self.max0 = np.maximum(p1[0],p2[0])
+            self.c = (p2[1]-p1[1])/(p2[0] - p1[0])
+            self.a = p1[0]
+            self.b = p1[1]
+        else:
+            self.set_dim = 0 # for point
+
+        consumer = True
+        producer = False
+        self.t = 0
+        self.Cdisc = Cdisc
+        self.t_lock = t_lock
+        self.timer = 0
+        self.locked = False
+        self.locked_next = False
+        self.p_last = np.array([np.nan, np.nan])
+        Resource.__init__(self, name, consumer, producer)
+
+    def costFunc(self, cvxvar):
+        """
+        Cost is just scaled euclidean distance of variable from desired operating point
+        """
+        cost = self.Cdisc * cvx.norm(cvxvar - self.points[self.desired[self.t],:], 2)
+        return cost
+
+    def convexHull(self, cvxvar):
+        if not self.locked:
+            if self.set_dim == 2:
+                hull = [self.A*cvxvar + self.b <= 0]
+            elif self.set_dim == 1:
+                hull = [cvxvar[0] >= self.min0, cvxvar[0] <= self.max0, cvxvar[1] == self.c*(cvxvar[0]-self.a) + self.b]
+            else:
+                hull = [cvxvar == self.points]
+        else:
+            hull = [cvxvar == self.p_last]
+        # update internal state
+        self.locked = self.locked_next
+        self.t += 1
+        return hull
+
+    def projFeas(self, setpoint):
+        if not self.locked:
+            # K nearest neighbors
+            dist_old = np.infty
+            for i in range(self.modes):
+                dist = np.linalg.norm(setpoint - self.points[i,:])
+                if dist < dist_old:
+                    ind = i
+                    dist_old = dist
+
+            sp = self.points[ind,:]
+
+            if sp[0] != self.p_last[0] or sp[1] != self.p_last[1]:
+                self.locked_next = True
+        else:
+            sp = self.p_last
+            self.timer += 1
+            if self.timer == self.t_lock:
+                self.locked_next = False
+                self.timer = 0
+        self.p_last = sp
+        return sp
+
+
+
