@@ -28,6 +28,7 @@ https://conda.anaconda.org/cvxgrp/osx-64/multiprocess-0.70.4-py36_0.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/ncurses-6.1-h0a44026_0.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/numpy-1.14.2-py36ha9ae307_1.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/openssl-1.0.2o-h26aff7b_0.tar.bz2
+https://repo.continuum.io/pkgs/main/osx-64/pandas-0.23.0-py36h1702cab_0.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/pip-10.0.1-py36_0.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/pyparsing-2.2.0-py36hb281f35_0.tar.bz2
 https://repo.continuum.io/pkgs/main/osx-64/python-3.6.5-hc167b69_1.tar.bz2
