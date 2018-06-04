@@ -27,6 +27,115 @@ class Controller(object):
         self.resource_names = resource_names
         self.mu = mu
         self.N = len(self.resource_list)
+        self.err = np.zeros(self.N)
+        self.p_requested = None
+        self.eps = None
+        self.prob_val = None
+
+    def addResource(self,resource):
+        self.resource_list.append(resource)
+        self.resource_names.append(resource.name)
+        self.N = len(self.resource_list)
+        self.err = np.zeros(self.N)
+
+    def runSimulation(self, pcc_signal, error_diffusion=True, solver='ECOS'):
+        batteries = np.arange(self.N)[[isinstance(r, Battery) for r in  self.resource_list]]
+        cols = ['PCC req', 'PCC imp', 'eps']
+        cols.extend([n + ' SoC' for n in np.array(self.resource_names)[batteries]])
+        cols.extend([r + ' req' for r in self.resource_names])
+        cols.extend([r + ' imp' for r in self.resource_names])
+        output = pd.DataFrame(columns=cols, index=range(len(pcc_signal)))
+        for t in range(len(pcc_signal)):
+            self.solveStep(pcc_signal[t], solver=solver)
+            output.loc[t]['PCC req'] = np.sum(self.p_requested)
+            output.loc[t]['eps'] = self.eps
+            if error_diffusion:
+                self.getProjectionsWithError()
+                self.updateError()
+            else:
+                self.getProjectionsNoError()
+            for i in range(self.N):
+                key1 = self.resource_names[i] + ' req'
+                key2 = self.resource_names[i] + ' imp'
+                output.loc[t][key1] = self.p_requested[i]
+                output.loc[t][key2] = self.p_operating[i]
+
+            output.loc[t]['PCC imp'] = np.sum(self.p_operating)
+            for j in batteries:
+                key = self.resource_names[j] + ' SoC'
+                output.loc[t][key] = np.float(self.resource_list[j].SoC)
+        return output
+
+    def solveStep(self, agg_point, solver='ECOS'):
+        """
+        takes the aggregated set point and
+        outputs power operating point for each resource and objective value
+        """
+        # number of resources
+        N = self.N
+
+        # define cvx variables
+        p = cvx.Variable(N)
+        eps = cvx.Variable(1)
+
+        # define aggregate tracking objective and constraint
+        obj = [self.mu*eps]
+        constraints = [cvx.sum_entries(p) <= agg_point + eps,
+                        agg_point - eps <= cvx.sum_entries(p),
+                        eps >= 0]
+
+        # gather all resources objective function and constraints
+        for i in range(N):
+            obj_part = self.resource_list[i].costFunc(p[i])
+            obj.append(obj_part)
+
+            constraints_part = self.resource_list[i].convexHull(p[i])
+            constraints.extend(constraints_part)
+
+        # form and solve problem
+        obj_final = cvx.Minimize( sum(obj) )
+        prob = cvx.Problem(obj_final, constraints)
+        prob.solve(solver=solver)
+
+        if prob.status != 'optimal':
+            print('Problem status is: ',prob.status)
+            p_out = p.value
+        else:
+            p_out = p.value
+
+        self.p_requested = p_out.A1
+        self.eps = eps.value
+        self.prob_val = prob.value
+
+    def updateError(self):
+        self.err = self.err +self.p_operating - self.p_requested
+
+    def getProjectionsWithError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i] - self.err[i]) for i in range(self.N)])
+        self.p_operating = p_operating
+
+    def getProjectionsNoError(self):
+        p_req = self.p_requested
+        p_operating = np.array([self.resource_list[i].projFeas(p_req[i]) for i in range(self.N)])
+        self.p_operating = p_operating
+
+class ControllerR2(object):
+    """
+    main controller object
+    """
+
+    def __init__(self, resource_list=None, mu=100):
+        resource_names = []
+        if resource_list is None:
+            self.resource_list = []
+        else:
+            self.resource_list = resource_list
+            for resource in resource_list:
+                resource_names.append(resource.name)
+        self.resource_names = resource_names
+        self.mu = mu
+        self.N = len(self.resource_list)
         self.err = np.zeros((2,self.N))
         self.p_requested = None
         self.eps = None
@@ -139,24 +248,24 @@ if __name__ == '__main__':
 
 
     # define resources
-    pv1 = PVSysR2('pv1')
-    batt1 = BatteryR2('batt1', initial_SoC=0.5,target_SoC=0.2)
-    disc1 = DiscreteR2('disc1', points=np.array([[-10,-5], [-20, -10], [-30, -15], [-13, -2], [0, 0]]), Cdisc=10)
+    pv1 = PVSysR2('pv1', Cpv=.1)
+    batt1 = BatteryR2('batt1', initial_SoC=0.5,target_SoC=0.2, Cb=0)
+    disc1 = DiscreteR2('disc1', points=np.array([[-10,-5], [-20, -10], [-30, -15], [-13, -2], [0, 0]]), Cdisc=0)
+    disc2 = DiscreteR2('disc2', points=np.array([[-10,-5], [-20, -10], [-30, -15], [-13, -2], [0, 0]]), Cdisc=0)
+    disc3 = DiscreteR2('disc3', points=np.array([[-10,-5], [-20, -10], [-30, -15], [-13, -2], [0, 0]]), Cdisc=0)
 
     # make controller
-    contr = Controller(mu=mu)
+    contr = ControllerR2(mu=mu)
 
     # add resources
-    contr.addResource(pv1)
-    contr.addResource(batt1)
+    #contr.addResource(pv1)
+    #contr.addResource(batt1)
     contr.addResource(disc1)
+    #contr.addResource(disc2)
+    #contr.addResource(disc3)
 
     print('resource names: ',contr.resource_names)
     print('total time horizon: ', T)
-
-    p_conv_all = np.zeros((contr.N,T))
-    p_op_all = np.zeros((contr.N,T))
-    eps_conv_all = np.zeros((1,T))
 
     start_time = time.time()
 
@@ -180,7 +289,7 @@ if __name__ == '__main__':
     #agg_point = np.array([[-15,-7.5], [-13, -9], [-30, -20]]).T
 
     dim, T = agg_point.shape
-    output = contr.runSimulation(agg_point)
+    output = contr.runSimulation(agg_point, solver='MOSEK')
 
     print('total comp time: ',time.time() - start_time)
 
