@@ -129,7 +129,7 @@ class Controller(object):
     def plotReqImpPower(self):
         batteries = np.arange(self.N)[[isinstance(r, Battery) for r in self.resource_list]]
         n_rows = 1 + len(self.resource_names) + len(batteries)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows*3, 10))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, self.output['PCC req'], label='requested')
         ax[0].plot(xs, self.output['PCC imp'], label='implemented')
@@ -158,11 +158,12 @@ class Controller(object):
                 ax[counter].set_ylabel('SoC')
                 ax[counter].legend(loc=(1.01, .1))
                 counter += 1
+        ax[-1].set_xlabel('time step')
         return fig
 
     def plotReqImpTotalEnergy(self):
         n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows * 3, 10))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, self.tstep * np.cumsum(self.output['PCC req']), label='requested')
         ax[0].plot(xs, self.tstep * np.cumsum(self.output['PCC imp']), label='implemented')
@@ -181,6 +182,7 @@ class Controller(object):
             ax[counter].set_ylabel('kWh')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
+        ax[-1].set_xlabel('time step')
         return fig
 
 
@@ -325,7 +327,7 @@ class ControllerR2(object):
             output = self.output_reactive
             ix = 1
             n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows*3, 10))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, output['PCC req'], label='requested')
         ax[0].plot(xs, output['PCC imp'], label='implemented')
@@ -360,6 +362,7 @@ class ControllerR2(object):
                 ax[counter].set_ylabel('SoC')
                 ax[counter].legend(loc=(1.01, .1))
                 counter += 1
+        ax[-1].set_xlabel('time step')
         return fig
 
     def plotReqImpTotalEnergy(self, select='real'):
@@ -370,7 +373,7 @@ class ControllerR2(object):
             output = self.output_reactive
             ix = 1
         n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows * 3, 10))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC req']), label='requested')
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC imp']), label='implemented')
@@ -395,6 +398,7 @@ class ControllerR2(object):
                 ax[counter].set_ylabel('kvar-h')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
+        ax[-1].set_xlabel('time step')
         return fig
 
 
