@@ -157,6 +157,7 @@ class Controller(object):
             counter += 1
             if is_battery:
                 ax[counter].plot(xs, self.output[name + ' SoC'], label='SoC')
+                ax[counter].plot(xs, resource.target_SoC[:len(xs)], label='target SoC')
                 ax[counter].set_title(name + ' SoC')
                 ax[counter].set_ylabel('SoC')
                 ax[counter].legend(loc=(1.01, .1))
@@ -364,7 +365,8 @@ class ControllerR2(object):
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery and select == 'real':
-                ax[counter].plot(xs, output[name + ' SoC'])
+                ax[counter].plot(xs, output[name + ' SoC'], label='SoC')
+                ax[counter].plot(xs, resource.target_SoC[:len(xs)], label='target SoC')
                 ax[counter].set_title(name + ' SoC')
                 ax[counter].set_ylabel('SoC')
                 ax[counter].legend(loc=(1.01, .1))
