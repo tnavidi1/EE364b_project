@@ -156,7 +156,7 @@ class Controller(object):
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery:
-                ax[counter].plot(xs, self.output[name + ' SoC'])
+                ax[counter].plot(xs, self.output[name + ' SoC'], label='SoC')
                 ax[counter].set_title(name + ' SoC')
                 ax[counter].set_ylabel('SoC')
                 ax[counter].legend(loc=(1.01, .1))
