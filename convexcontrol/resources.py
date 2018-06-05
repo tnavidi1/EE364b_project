@@ -180,7 +180,7 @@ class Battery(Resource):
         else:
             p = max(self.pmin, -p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if below the desired SoC, try to charge
-        return cost + self.Cbl * np.abs(cvxvar)         # Cbl represents cost of the battery amortized over
+        return cost + self.Cbl * cvx.abs(cvxvar)         # Cbl represents cost of the battery amortized over
                                                         # total lifetime energy
 
     def convexHull(self, cvxvar):
@@ -266,7 +266,7 @@ class BatteryR2(Resource):
         else:
             p = max(self.pmin, -p_soc)
             cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if below the desired SoC, try to charge
-        return cost + self.Cbl * np.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
+        return cost + self.Cbl * cvx.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
                                                             # total lifetime energy
 
     def convexHull(self, cvxvar):
