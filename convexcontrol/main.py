@@ -9,7 +9,7 @@ import cvxpy as cvx
 import matplotlib.pyplot as plt
 import time
 
-from resources import Battery
+from .resources import Battery
 
 class Controller(object):
     """

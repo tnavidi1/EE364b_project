@@ -70,8 +70,10 @@ class PVSys(Resource):
         if isinstance(data, str):
             if data == 'random':
                 self.power_signal = np.random.uniform(0, pmax, T)
+                self.H = T
         else:
             self.power_signal = np.squeeze(np.array(data))
+            self.H = len(self.power_signal)
         self.t = 0
         self.Cpv = Cpv
         cost_function = lambda x: -Cpv * x
@@ -84,8 +86,8 @@ class PVSys(Resource):
         self.t += 1
         return hull
 
-    def projFeas(self, setpoint):
-        proj = np.clip(setpoint, 0, self.power_signal[self.t])
+    def projFeas(self, setpoint):       
+        proj = np.clip(setpoint, 0, self.power_signal[min(self.t, self.H-1)])  # last projection index
         return proj
 
 class PVSysR2(Resource):
@@ -109,8 +111,10 @@ class PVSysR2(Resource):
         if isinstance(data, str):
             if data == 'random':
                 self.power_signal = np.random.uniform(0, pmax, T)
+                self.H = T
         else:
             self.power_signal = np.squeeze(np.array(data))
+            self.H = len(self.power_signal)
         self.pmax = pmax
         self.t = 0
         self.Cpv = Cpv
@@ -129,7 +133,7 @@ class PVSysR2(Resource):
         return hull
 
     def projFeas(self, setpoint):
-        proj0 = np.clip(setpoint[0], 0, self.power_signal[self.t])
+        proj0 = np.clip(setpoint[0], 0, self.power_signal[min(self.t, self.H-1)])
         if np.linalg.norm((proj0, setpoint[1])) <= self.pmax:
             proj = np.array((proj0, setpoint[1]))
         else:
