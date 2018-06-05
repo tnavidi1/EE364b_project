@@ -151,24 +151,30 @@ class Battery(Resource):
 
 
     def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
-                 tstep=1./60):
+                 tstep=1./60, T=200):
+        if isinstance(target_SoC, float):
+            self.target_SoC = np.ones(T) * target_SoC
+            self.H = T
+        else:
+            self.target_SoC = target_SoC
+            self.H = len(target_SoC)
         consumer = True
         producer = True
         self.Cb = Cb
         self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
-        self.target_SoC = target_SoC
         self.SoC = initial_SoC
         self.SoC_next = initial_SoC
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
+        self.t = 0
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
-        if self.SoC >= self.target_SoC:
+        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC[self.t]:
             p = min(self.pmax, p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if above the desired SoC, try to discharge
         else:
@@ -200,6 +206,7 @@ class Battery(Resource):
         pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
+        self.t += 1
         return [cvxvar >= pmin, cvxvar <= pmax]
 
     def projFeas(self, setpoint):
@@ -231,30 +238,29 @@ class BatteryR2(Resource):
 
     def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
                  tstep=1./60):
+        if isinstance(target_SoC, float):
+            self.target_SoC = np.ones(T) * target_SoC
+            self.H = T
+        else:
+            self.target_SoC = target_SoC
+            self.H = len(target_SoC)
         consumer = True
         producer = True
         self.Cb = Cb
         self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
-        self.target_SoC = target_SoC
         self.SoC = initial_SoC
         self.SoC_next = initial_SoC
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
-        def cost_function(x):
-            if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x[0] - self.pmax, 2) # if above the desired SoC, try to discharge
-            else:
-                cost = self.Cb * np.power(x[0] - self.pmin, 2) # if below the desired SoC, try to charge
-            return cost + self.Cbl * np.abs(x[0])                 # Cbl represents cost of the battery amortized over
-                                                               # total lifetime energy
-        Resource.__init__(self, name, consumer, producer, cost_function)
+        self.t = 0
+        Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
-        if self.SoC >= self.target_SoC:
+        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC[self.t]:
             p = min(self.pmax, p_soc)
             cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if above the desired SoC, try to discharge
         else:
@@ -286,6 +292,7 @@ class BatteryR2(Resource):
         pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
+        self.t += 1
         return [
             cvxvar[0] >= pmin,
             cvxvar[0] <= pmax,
