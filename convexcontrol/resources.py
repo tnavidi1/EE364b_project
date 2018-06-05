@@ -72,6 +72,8 @@ class PVSys(Resource):
                 self.power_signal = np.random.uniform(0, pmax, T)
         else:
             self.power_signal = np.squeeze(np.array(data))
+        
+        self.H = T  # horizon
         self.t = 0
         self.Cpv = Cpv
         cost_function = lambda x: -Cpv * x
@@ -84,8 +86,8 @@ class PVSys(Resource):
         self.t += 1
         return hull
 
-    def projFeas(self, setpoint):
-        proj = np.clip(setpoint, 0, self.power_signal[self.t])
+    def projFeas(self, setpoint):       
+        proj = np.clip(setpoint, 0, self.power_signal[min(self.t, self.H-1)])  # last projection index
         return proj
 
 class PVSysR2(Resource):
