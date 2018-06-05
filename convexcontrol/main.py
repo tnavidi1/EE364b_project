@@ -9,7 +9,7 @@ import cvxpy as cvx
 import matplotlib.pyplot as plt
 import time
 
-from .resources import Battery
+from .resources import Battery, TCL
 
 class Controller(object):
     """
@@ -31,6 +31,8 @@ class Controller(object):
         self.p_requested = None
         self.eps = None
         self.prob_val = None
+        self.output = None
+        self.pcc_signal = None
 
     def addResource(self,resource):
         self.resource_list.append(resource)
@@ -64,7 +66,8 @@ class Controller(object):
             for j in batteries:
                 key = self.resource_names[j] + ' SoC'
                 output.loc[t][key] = np.float(self.resource_list[j].SoC)
-        return output
+        self.pcc_signal = pcc_signal
+        self.output = output
 
     def solveStep(self, agg_point, solver='ECOS'):
         """
@@ -119,6 +122,62 @@ class Controller(object):
         p_req = self.p_requested
         p_operating = np.array([self.resource_list[i].projFeas(p_req[i]) for i in range(self.N)])
         self.p_operating = p_operating
+
+    def plotReqImpPower(self):
+        batteries = np.arange(self.N)[[isinstance(r, Battery) for r in self.resource_list]]
+        n_rows = 1 + len(self.resource_names) + len(batteries)
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows*3, 10))
+        xs = range(1, len(self.pcc_signal) + 1)
+        ax[0].plot(xs, self.output['PCC req'], label='requested')
+        ax[0].plot(xs, self.output['PCC imp'], label='implemented')
+        ax[0].plot(xs, self.pcc_signal, ls='--', label='set point')
+        ax[0].set_title('aggregate set point signal')
+        ax[0].set_ylabel('kW')
+        ax[0].legend(loc=(1.01, .1))
+        counter = 1
+        for resource in self.resource_list:
+            is_battery = isinstance(resource, Battery)
+            is_tcl = isinstance(resource, TCL)
+            name = resource.name
+            key1 = name + ' req'
+            key2 = name + ' imp'
+            ax[counter].plot(xs, self.output[key1], label='requested')
+            ax[counter].plot(xs, self.output[key2], label='implemented')
+            ax[counter].set_title(name + ' power signal')
+            ax[counter].set_ylabel('kW')
+            if is_tcl:
+                ax[counter].plot(xs, resource.p_con * resource.step_size, label='desired')
+            ax[counter].legend(loc=(1.01, .1))
+            counter += 1
+            if is_battery:
+                ax[counter].plot(xs, self.output[name + ' SoC'])
+                ax[counter].set_title(name + ' SoC')
+                ax[counter].set_ylabel('SoC')
+                ax[counter].legend(loc=(1.01, .1))
+                counter += 1
+        return fig
+
+    def plotReqImpTotalEnergy(self):
+        n_rows = 1 + len(self.resource_names)
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(n_rows * 3, 10))
+        xs = range(1, len(self.pcc_signal) + 1)
+        ax[0].plot(xs, np.cumsum(self.output['PCC req']), label='requested')
+        ax[0].plot(xs, np.cumsum(self.output['PCC imp']), label='implemented')
+        ax[0].plot(xs, np.cumsum(self.pcc_signal), ls='--', label='set point')
+        ax[0].set_title('total aggregate energy')
+        ax[0].set_ylabel('kWh')
+        ax[0].legend(loc=(1.01, .1))
+        counter = 1
+        for resource in self.resource_list:
+            name = resource.name
+            key1 = name + ' req'
+            key2 = name + ' imp'
+            ax[counter].plot(xs, np.cumsum(self.output[key1]), label='requested')
+            ax[counter].plot(xs, np.cumsum(self.output[key2]), label='implemented')
+            ax[counter].set_title(name + ' total energy')
+            counter += 1
+        return fig
+
 
 class ControllerR2(object):
     """
