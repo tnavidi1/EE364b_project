@@ -151,30 +151,36 @@ class Battery(Resource):
 
 
     def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
-                 tstep=1./60):
+                 tstep=1./60, T=200):
+        if isinstance(target_SoC, float):
+            self.target_SoC = np.ones(T) * target_SoC
+            self.H = T
+        else:
+            self.target_SoC = target_SoC
+            self.H = len(target_SoC)
         consumer = True
         producer = True
         self.Cb = Cb
         self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
-        self.target_SoC = target_SoC
         self.SoC = initial_SoC
         self.SoC_next = initial_SoC
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
+        self.t = 0
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
-        if self.SoC >= self.target_SoC:
+        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC[self.t]:
             p = min(self.pmax, p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if above the desired SoC, try to discharge
         else:
             p = max(self.pmin, -p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if below the desired SoC, try to charge
-        return cost + self.Cbl * np.abs(cvxvar)         # Cbl represents cost of the battery amortized over
+        return cost + self.Cbl * cvx.abs(cvxvar)         # Cbl represents cost of the battery amortized over
                                                         # total lifetime energy
 
     def convexHull(self, cvxvar):
@@ -200,6 +206,7 @@ class Battery(Resource):
         pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
+        self.t += 1
         return [cvxvar >= pmin, cvxvar <= pmax]
 
     def projFeas(self, setpoint):
@@ -230,37 +237,36 @@ class BatteryR2(Resource):
 
 
     def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
-                 tstep=1./60):
+                 tstep=1./60, T=200):
+        if isinstance(target_SoC, float):
+            self.target_SoC = np.ones(T) * target_SoC
+            self.H = T
+        else:
+            self.target_SoC = target_SoC
+            self.H = len(target_SoC)
         consumer = True
         producer = True
         self.Cb = Cb
         self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
-        self.target_SoC = target_SoC
         self.SoC = initial_SoC
         self.SoC_next = initial_SoC
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
-        def cost_function(x):
-            if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x[0] - self.pmax, 2) # if above the desired SoC, try to discharge
-            else:
-                cost = self.Cb * np.power(x[0] - self.pmin, 2) # if below the desired SoC, try to charge
-            return cost + self.Cbl * np.abs(x[0])                 # Cbl represents cost of the battery amortized over
-                                                               # total lifetime energy
-        Resource.__init__(self, name, consumer, producer, cost_function)
+        self.t = 0
+        Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
-        if self.SoC >= self.target_SoC:
+        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC[self.t]:
             p = min(self.pmax, p_soc)
             cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if above the desired SoC, try to discharge
         else:
             p = max(self.pmin, -p_soc)
             cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if below the desired SoC, try to charge
-        return cost + self.Cbl * np.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
+        return cost + self.Cbl * cvx.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
                                                             # total lifetime energy
 
     def convexHull(self, cvxvar):
@@ -286,6 +292,7 @@ class BatteryR2(Resource):
         pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
+        self.t += 1
         return [
             cvxvar[0] >= pmin,
             cvxvar[0] <= pmax,
@@ -401,132 +408,13 @@ class TCL(Resource):
         return sp
 
 
-class PVSysR2(Resource):
-
-    """ PV System Class in R2
-    This class represents a solar PV generator with real and reactive power control. It can accept an pre-recorded power
-    signal or can generate power randomly, as a worst-case scenario of the stochastic nature of the resource.
-    """
-
-    def __init__(self, name, Cpv=10, data='random', pmax=30, T=200):
-        """
-        :param name: (str) the name of the resource
-        :param Cpv:  (float) the constant associated with PV cost function
-        :param data: a 1-D array or similar representing a PV power signal (optional)
-        :param pmax: the maximum possible power output of the system, defines the feasible set in R2
-        :param T: if data is set to 'random' this is the number of random data point to generate
-        """
-        if isinstance(data, str):
-            if data == 'random':
-                self.power_signal = np.random.uniform(0, pmax, T)
-        else:
-            self.power_signal = np.squeeze(np.array(data))
-        self.pmax = pmax
-        self.t = 0
-        self.Cpv = Cpv
-        cost_function = lambda x: -Cpv * x[0]
-        consumer = False
-        producer = True
-        Resource.__init__(self, name, consumer, producer, cost_function)
-
-    def convexHull(self, cvxvar):
-        hull = [
-            cvxvar[0] >= 0,
-            cvxvar[0] <= self.power_signal[self.t],
-            cvx.norm(cvxvar, 2) <= self.pmax
-        ]
-        self.t += 1
-        return hull
-
-    def projFeas(self, setpoint):
-        proj0 = np.clip(setpoint[0], 0, self.power_signal[self.t])
-        if np.linalg.norm((proj0, setpoint[1])) <= self.pmax:
-            proj = np.array((proj0, setpoint[1]))
-        else:
-            proj1 = np.sign(setpoint[1]) * np.sqrt(self.pmax ** 2 - proj0 ** 2)
-            proj = np.array((proj0, proj1))
-        return proj
-
-
-class BatteryR2(Resource):
-
-    """ Battery Class
-    This implements a simple battery model. The state of charge is estimated by power input/output.
-    """
-
-
-    def __init__(self, name, Cb=10, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
-                 tstep=1./60):
-        consumer = True
-        producer = True
-        self.Cb = Cb
-        self.pmax = pmax
-        self.pmin = pmin
-        self.target_SoC = target_SoC
-        self.SoC = initial_SoC
-        self.SoC_next = initial_SoC
-        self.capacity = capacity
-        self.eff = eff
-        self.tstep = np.float(tstep)
-        def cost_function(x):
-            if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x[0] - self.pmax, 2) # if above the desired SoC, try to discharge
-            else:
-                cost = self.Cb * np.power(x[0] - self.pmin, 2) # if below the desired SoC, try to charge
-            return cost
-        Resource.__init__(self, name, consumer, producer, cost_function)
-
-    def convexHull(self, cvxvar):
-        """
-        The feasible set of power output (input) of the battery is defined not only by the physical limits self.pmin and
-        self.pmax, but also by the state of charge of the battery. The battery cannot source more power over a time step
-        than it has charge remaining, cannot accept more power over a time step than it has free SoC left. In other
-        words:
-            0 <= (SoC * capacity) - (power * time_step) / efficiency <= capacity
-        Note that we define positive power as generation. The more restrictive constraint is the one that must hold.
-        This set is already convex.
-        In keeping with the algorithm design, this is the "observation" of the master algorithm, ostensibly obtained
-        from the previous setpoint request. So, although the actual SoC changed after the previous setpoint request,
-        we assume that the master algorithm does not know this yet. Thus, we update the self.SoC attribute after
-        calculating the feasible set based on the old value.
-        :param cvxvar: a cvxpy.Variable instance
-        :return: a list of cvxpy constraints
-        """
-        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
-        pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
-        self.SoC = self.SoC_next
-        return [
-            cvxvar[0] >= pmin,
-            cvxvar[0] <= pmax,
-            cvx.norm(cvxvar, 2) <= self.pmax
-        ]
-
-    def projFeas(self, setpoint):
-        """
-        The feasible set is identical to the description given in self.ConvexHull. After the setpoint is implemented,
-        the state of charge of the battery changes according to
-        SoC_next = SoC - (power * time_step) / (efficiency * capacity)
-        We store this in the attribute self.SoC_next until the master algorithm
-        :param setpoint: (float) the requested power output (input) of the battery
-        :return:
-        """
-        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
-        pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
-        sp0 = np.clip(setpoint[0], pmin, pmax)
-        self.SoC_next = self.SoC - sp0 * self.tstep / (self.capacity * self.eff)
-        if np.linalg.norm((sp0, setpoint[1])) <= self.pmax:
-            sp = np.array((sp0, setpoint[1]))
-        else:
-            sp1 = np.sign(setpoint[1]) * np.sqrt(self.pmax ** 2 - sp0 ** 2)
-            sp = np.array((sp0, sp1))
-        return sp
-
 class DiscreteR2(Resource):
     """ Discrete operating modes device
     Device can output power from a collection of any points
     """
 
-    def __init__(self, name, points = np.array([[-10,-5], [-20, -10], [-30, -20]]), desired = np.zeros(200,dtype=int), Cdisc=10, t_lock=5):
+    def __init__(self, name, points=np.array([[-10,-5], [-20, -10], [-30, -20]]), desired=np.zeros(200,dtype=int),
+                 Cdisc=10, t_lock=5):
         from scipy.spatial import ConvexHull
 
         points = np.array(points, dtype=float) # set of points in np array shape (points, dim=2)
