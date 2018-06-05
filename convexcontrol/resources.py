@@ -150,11 +150,12 @@ class Battery(Resource):
     """
 
 
-    def __init__(self, name, Cb=10, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
+    def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
                  tstep=1./60):
         consumer = True
         producer = True
         self.Cb = Cb
+        self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
         self.target_SoC = target_SoC
@@ -163,13 +164,18 @@ class Battery(Resource):
         self.capacity = capacity
         self.eff = eff
         self.tstep = np.float(tstep)
-        def cost_function(x):
-            if self.SoC >= self.target_SoC:
-                cost = self.Cb * np.power(x - self.pmax, 2) # if above the desired SoC, try to discharge
-            else:
-                cost = self.Cb * np.power(x - self.pmin, 2) # if below the desired SoC, try to charge
-            return cost
-        Resource.__init__(self, name, consumer, producer, cost_function)
+        Resource.__init__(self, name, consumer, producer)
+
+    def costFunc(self, cvxvar):
+        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC:
+            p = min(self.pmax, p_soc)
+            cost = self.Cb * np.power(cvxvar - p, 2)    # if above the desired SoC, try to discharge
+        else:
+            p = max(self.pmin, -p_soc)
+            cost = self.Cb * np.power(cvxvar - p, 2)    # if below the desired SoC, try to charge
+        return cost + self.Cbl * np.abs(cvxvar)         # Cbl represents cost of the battery amortized over
+                                                        # total lifetime energy
 
     def convexHull(self, cvxvar):
         """
@@ -223,11 +229,12 @@ class BatteryR2(Resource):
     """
 
 
-    def __init__(self, name, Cb=10, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
+    def __init__(self, name, Cb=10, Cbl=0, pmin=-50, pmax=50, initial_SoC=0.2, target_SoC=0.5, capacity=30, eff=0.95,
                  tstep=1./60):
         consumer = True
         producer = True
         self.Cb = Cb
+        self.Cbl = Cbl
         self.pmax = pmax
         self.pmin = pmin
         self.target_SoC = target_SoC
@@ -241,8 +248,20 @@ class BatteryR2(Resource):
                 cost = self.Cb * np.power(x[0] - self.pmax, 2) # if above the desired SoC, try to discharge
             else:
                 cost = self.Cb * np.power(x[0] - self.pmin, 2) # if below the desired SoC, try to charge
-            return cost
+            return cost + self.Cbl * np.abs(x[0])                 # Cbl represents cost of the battery amortized over
+                                                               # total lifetime energy
         Resource.__init__(self, name, consumer, producer, cost_function)
+
+    def costFunc(self, cvxvar):
+        p_soc = np.abs(self.SoC - self.target_SoC) * self.capacity * self.eff / self.tstep
+        if self.SoC >= self.target_SoC:
+            p = min(self.pmax, p_soc)
+            cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if above the desired SoC, try to discharge
+        else:
+            p = max(self.pmin, -p_soc)
+            cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if below the desired SoC, try to charge
+        return cost + self.Cbl * np.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
+                                                            # total lifetime energy
 
     def convexHull(self, cvxvar):
         """
