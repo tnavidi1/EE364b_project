@@ -9,7 +9,7 @@ import cvxpy as cvx
 import matplotlib.pyplot as plt
 import time
 
-from .resources import Battery, TCL
+from .resources import Battery, TCL, BatteryR2, DiscreteR2, PVSys, PVSysR2
 
 class Controller(object):
     """
@@ -141,6 +141,7 @@ class Controller(object):
         for resource in self.resource_list:
             is_battery = isinstance(resource, Battery)
             is_tcl = isinstance(resource, TCL)
+            is_pv = isinstance(resource, PVSys)
             name = resource.name
             key1 = name + ' req'
             key2 = name + ' imp'
@@ -149,7 +150,9 @@ class Controller(object):
             ax[counter].set_title(name + ' power signal')
             ax[counter].set_ylabel('kW')
             if is_tcl:
-                ax[counter].plot(xs, resource.p_con * resource.step_size, label='desired')
+                ax[counter].plot(xs, resource.p_con * resource.step_size, ls='--', label='desired')
+            if is_pv:
+                ax[counter].plot(xs, resource.power_signal[:len(xs)], ls='--', label='desired')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery:
@@ -220,7 +223,7 @@ class ControllerR2(object):
         self.err = np.zeros((2,self.N))
 
     def runSimulation(self, pcc_signal, error_diffusion=True, solver='ECOS'):
-        batteries = np.arange(self.N)[[isinstance(r, Battery) for r in  self.resource_list]]
+        batteries = np.arange(self.N)[[isinstance(r, BatteryR2) for r in  self.resource_list]]
         cols = ['PCC req', 'PCC imp', 'eps']
         cols.extend([r + ' req' for r in self.resource_names])
         cols.extend([r + ' imp' for r in self.resource_names])
@@ -234,7 +237,7 @@ class ControllerR2(object):
             output_real.loc[t]['PCC req'] = pcc_req[0]
             output_reactive.loc[t]['PCC req'] = pcc_req[1]
             output_real.loc[t]['eps'] = self.eps[0]
-            output_reactive[t]['eps'] = self.eps[1]
+            output_reactive.loc[t]['eps'] = self.eps[1]
             if error_diffusion:
                 self.getProjectionsWithError()
                 self.updateError()
@@ -295,7 +298,7 @@ class ControllerR2(object):
             p_out = p.value
 
         self.p_requested = np.asarray(p_out)
-        self.eps = eps.value
+        self.eps = np.squeeze(np.asarray(eps.value))
         self.prob_val = prob.value
 
         #print('eps val', eps.value)
@@ -328,7 +331,7 @@ class ControllerR2(object):
             ix = 1
             n_rows = 1 + len(self.resource_names)
         fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
-        xs = range(1, len(self.pcc_signal) + 1)
+        xs = range(1, self.pcc_signal.shape[1] + 1)
         ax[0].plot(xs, output['PCC req'], label='requested')
         ax[0].plot(xs, output['PCC imp'], label='implemented')
         ax[0].plot(xs, self.pcc_signal[ix, :], ls='--', label='set point')
@@ -342,6 +345,7 @@ class ControllerR2(object):
         for resource in self.resource_list:
             is_battery = isinstance(resource, BatteryR2)
             is_tcl = isinstance(resource, DiscreteR2)
+            is_pv = isinstance(resource, PVSysR2)
             name = resource.name
             key1 = name + ' req'
             key2 = name + ' imp'
@@ -353,7 +357,10 @@ class ControllerR2(object):
             else:
                 ax[counter].set_ylabel('kvar')
             if is_tcl:
-                ax[counter].plot(xs, resource.p_con * resource.step_size, label='desired')
+                p_con = resource.points[resource.desired[:self.pcc_signal.shape[1]], :].T
+                ax[counter].plot(xs, p_con[ix], ls='--', label='desired')
+            if is_pv and select == 'real':
+                ax[counter].plot(xs, resource.power_signal[:len(xs)], ls='--', label='desired')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery and select == 'real':
@@ -374,7 +381,7 @@ class ControllerR2(object):
             ix = 1
         n_rows = 1 + len(self.resource_names)
         fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
-        xs = range(1, len(self.pcc_signal) + 1)
+        xs = range(1, self.pcc_signal.shape[1] + 1)
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC req']), label='requested')
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC imp']), label='implemented')
         ax[0].plot(xs, self.tstep * np.cumsum(self.pcc_signal[ix, :]), ls='--', label='set point')

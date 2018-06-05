@@ -507,7 +507,8 @@ class DiscreteR2(Resource):
     Device can output power from a collection of any points
     """
 
-    def __init__(self, name, points = np.array([[-10,-5], [-20, -10], [-30, -20]]), desired = np.zeros(200,dtype=int), Cdisc=10, t_lock=5):
+    def __init__(self, name, points=np.array([[-10,-5], [-20, -10], [-30, -20]]), desired=np.zeros(200,dtype=int),
+                 Cdisc=10, t_lock=5):
         from scipy.spatial import ConvexHull
 
         points = np.array(points, dtype=float) # set of points in np array shape (points, dim=2)
