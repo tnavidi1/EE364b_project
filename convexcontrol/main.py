@@ -126,7 +126,7 @@ class Controller(object):
         p_operating = np.array([self.resource_list[i].projFeas(p_req[i]) for i in range(self.N)])
         self.p_operating = p_operating
 
-    def plotReqImpPower(self):
+    def plotReqImpPower(self, show_tcl_desired=True):
         batteries = np.arange(self.N)[[isinstance(r, Battery) for r in self.resource_list]]
         n_rows = 1 + len(self.resource_names) + len(batteries)
         fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
@@ -149,7 +149,7 @@ class Controller(object):
             ax[counter].plot(xs, self.output[key2], label='implemented')
             ax[counter].set_title(name + ' power signal')
             ax[counter].set_ylabel('kW')
-            if is_tcl:
+            if is_tcl and show_tcl_desired:
                 ax[counter].plot(xs, resource.p_con * resource.step_size, ls='--', label='desired')
             if is_pv:
                 ax[counter].plot(xs, resource.power_signal[:len(xs)], ls='--', label='desired')
@@ -321,7 +321,7 @@ class ControllerR2(object):
         p_operating = np.array([self.resource_list[i].projFeas(p_req[:,i]) for i in range(self.N)])
         self.p_operating = p_operating
 
-    def plotReqImpPower(self, select='real'):
+    def plotReqImpPower(self, select='real', show_tcl_desired=True):
         batteries = np.arange(self.N)[[isinstance(r, BatteryR2) for r in self.resource_list]]
         if select == 'real':
             output = self.output_real
@@ -357,7 +357,7 @@ class ControllerR2(object):
                 ax[counter].set_ylabel('kW')
             else:
                 ax[counter].set_ylabel('kvar')
-            if is_tcl:
+            if is_tcl and show_tcl_desired:
                 p_con = resource.points[resource.desired[:self.pcc_signal.shape[1]], :].T
                 ax[counter].plot(xs, p_con[ix], ls='--', label='desired')
             if is_pv and select == 'real':
