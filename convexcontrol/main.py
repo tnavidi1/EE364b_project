@@ -129,7 +129,7 @@ class Controller(object):
     def plotReqImpPower(self, show_tcl_desired=True):
         batteries = np.arange(self.N)[[isinstance(r, Battery) for r in self.resource_list]]
         n_rows = 1 + len(self.resource_names) + len(batteries)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(8, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, self.output['PCC req'], label='requested')
         ax[0].plot(xs, self.output['PCC imp'], label='implemented')
@@ -167,7 +167,7 @@ class Controller(object):
 
     def plotReqImpTotalEnergy(self):
         n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(8, n_rows * 2))
         xs = range(1, len(self.pcc_signal) + 1)
         ax[0].plot(xs, self.tstep * np.cumsum(self.output['PCC req']), label='requested')
         ax[0].plot(xs, self.tstep * np.cumsum(self.output['PCC imp']), label='implemented')
@@ -331,7 +331,7 @@ class ControllerR2(object):
             output = self.output_reactive
             ix = 1
             n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(8, n_rows * 2))
         xs = range(1, self.pcc_signal.shape[1] + 1)
         ax[0].plot(xs, output['PCC req'], label='requested')
         ax[0].plot(xs, output['PCC imp'], label='implemented')
@@ -382,7 +382,7 @@ class ControllerR2(object):
             output = self.output_reactive
             ix = 1
         n_rows = 1 + len(self.resource_names)
-        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(10, n_rows * 2))
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(8, n_rows * 2))
         xs = range(1, self.pcc_signal.shape[1] + 1)
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC req']), label='requested')
         ax[0].plot(xs, self.tstep * np.cumsum(output['PCC imp']), label='implemented')
