@@ -152,7 +152,7 @@ class Controller(object):
             if is_tcl and show_tcl_desired:
                 ax[counter].plot(xs, resource.p_con * resource.step_size, ls='--', label='desired')
             if is_pv:
-                ax[counter].plot(xs, resource.power_signal[:len(xs)], ls='--', label='desired')
+                ax[counter].plot(xs, resource.power_signal[1:len(xs)+1], ls='--', label='desired')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery:
@@ -361,7 +361,7 @@ class ControllerR2(object):
                 p_con = resource.points[resource.desired[:self.pcc_signal.shape[1]], :].T
                 ax[counter].plot(xs, p_con[ix], ls='--', label='desired')
             if is_pv and select == 'real':
-                ax[counter].plot(xs, resource.power_signal[:len(xs)], ls='--', label='desired')
+                ax[counter].plot(xs, resource.power_signal[1:len(xs)+1], ls='--', label='desired')
             ax[counter].legend(loc=(1.01, .1))
             counter += 1
             if is_battery and select == 'real':
