@@ -48,6 +48,19 @@ class Resource(object):
         if self.projection is not None:
             return self.projection(setpoint)
 
+class Generator(Resource):
+    def __init__(self, name, pmin=5, pmax=20, Cg=1e0):
+        consumer = False
+        producer = True
+        cost_function = lambda x: Cg * np.power(x, 2)
+        convex_hull = lambda x: [x >= 0, x <= pmax]
+        def proj(sp):
+            if sp >= 0.5 * pmin:
+                out = np.clip(sp, pmin, pmax)
+            else:
+                out = 0
+            return out
+        Resource.__init__(self, name, consumer, producer, cost_function, convex_hull, proj)
 
 class PVSys(Resource):
 
