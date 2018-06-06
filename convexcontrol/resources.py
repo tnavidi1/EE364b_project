@@ -173,12 +173,13 @@ class Battery(Resource):
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
         if self.SoC >= self.target_SoC[self.t]:
+            p_soc = (self.SoC - self.target_SoC[self.t]) * self.capacity / (self.tstep * self.eff)
             p = min(self.pmax, p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if above the desired SoC, try to discharge
         else:
-            p = max(self.pmin, -p_soc)
+            p_soc = (self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+            p = max(self.pmin, p_soc)
             cost = self.Cb * np.power(cvxvar - p, 2)    # if below the desired SoC, try to charge
         return cost + self.Cbl * cvx.abs(cvxvar)         # Cbl represents cost of the battery amortized over
                                                         # total lifetime energy
@@ -203,7 +204,7 @@ class Battery(Resource):
         :param cvxvar: a cvxpy.Variable instance
         :return: a list of cvxpy constraints
         """
-        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity / (self.eff * self.tstep))
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
         self.SoC = self.SoC_next
         self.t += 1
@@ -221,10 +222,13 @@ class Battery(Resource):
         :param setpoint: (float) the requested power output (input) of the battery
         :return:
         """
-        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity / (self.eff * self.tstep))
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
         sp = np.clip(setpoint, pmin, pmax)
-        self.SoC_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
+        if sp >= 0:
+            self.SoC_next = self.SoC - sp * self.tstep / (self.capacity * self.eff)
+        else:
+            self.SoC_next = self.SoC - sp * self.tstep * self.eff / (self.capacity)
         return sp
 
 class BatteryR2(Resource):
@@ -259,15 +263,16 @@ class BatteryR2(Resource):
         Resource.__init__(self, name, consumer, producer)
 
     def costFunc(self, cvxvar):
-        p_soc = np.abs(self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
         if self.SoC >= self.target_SoC[self.t]:
+            p_soc = (self.SoC - self.target_SoC[self.t]) * self.capacity / (self.tstep * self.eff)
             p = min(self.pmax, p_soc)
-            cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if above the desired SoC, try to discharge
+            cost = self.Cb * np.power(cvxvar[0] - p, 2)    # if above the desired SoC, try to discharge
         else:
-            p = max(self.pmin, -p_soc)
-            cost = self.Cb * np.power(cvxvar[0] - p, 2)     # if below the desired SoC, try to charge
-        return cost + self.Cbl * cvx.abs(cvxvar[0])          # Cbl represents cost of the battery amortized over
-                                                            # total lifetime energy
+            p_soc = (self.SoC - self.target_SoC[self.t]) * self.capacity * self.eff / self.tstep
+            p = max(self.pmin, p_soc)
+            cost = self.Cb * np.power(cvxvar[0] - p, 2)    # if below the desired SoC, try to charge
+        return cost + self.Cbl * cvx.abs(cvxvar[0])         # Cbl represents cost of the battery amortized over
+                                                        # total lifetime energy
 
     def convexHull(self, cvxvar):
         """
@@ -289,8 +294,8 @@ class BatteryR2(Resource):
         :param cvxvar: a cvxpy.Variable instance
         :return: a list of cvxpy constraints
         """
-        pmin = max(self.pmin,(self.SoC - 1.) * self.capacity * self.eff / self.tstep)
-        pmax = min(self.pmax, self.SoC * self.capacity * self.eff/ self.tstep)
+        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity / (self.eff * self.tstep))
+        pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
         self.SoC = self.SoC_next
         self.t += 1
         return [
@@ -311,10 +316,13 @@ class BatteryR2(Resource):
         :param setpoint: (float) the requested power output (input) of the battery
         :return:
         """
-        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity * self.eff / self.tstep)
+        pmin = max(self.pmin, (self.SoC - 1.) * self.capacity / (self.eff * self.tstep))
         pmax = min(self.pmax, self.SoC * self.capacity * self.eff / self.tstep)
         sp0 = np.clip(setpoint[0], pmin, pmax)
-        self.SoC_next = self.SoC - sp0 * self.tstep / (self.capacity * self.eff)
+        if sp0 >= 0:
+            self.SoC_next = self.SoC - sp0 * self.tstep / (self.capacity * self.eff)
+        else:
+            self.SoC_next = self.SoC - sp0 * self.tstep * self.eff / (self.capacity)
         if np.linalg.norm((sp0, setpoint[1])) <= self.pmax:
             sp = np.array((sp0, setpoint[1]))
         else:
