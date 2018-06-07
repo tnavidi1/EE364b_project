@@ -188,6 +188,30 @@ class Controller(object):
             counter += 1
         ax[-1].set_xlabel('time step')
         return fig
+    
+    def plotReqImpTotalEnergyDiff(self):
+        n_rows = 1 + len(self.resource_names)
+        fig, ax = plt.subplots(nrows=n_rows, sharex=True, figsize=(8, n_rows * 2))
+        xs = range(1, len(self.pcc_signal) + 1)
+        ax[0].plot(xs, (self.tstep * np.cumsum(self.output['PCC req']) - self.tstep * np.cumsum(self.output['PCC imp'])),
+                   label='req - impl')
+        #ax[0].plot(xs, self.tstep * np.cumsum(self.pcc_signal), ls='--', label='set point')
+        ax[0].set_title('difference of aggregate energy')
+        ax[0].set_ylabel('kWh')
+        ax[0].legend(loc=(1.01, .1))
+        counter = 1
+        for resource in self.resource_list:
+            name = resource.name
+            key1 = name + ' req'
+            key2 = name + ' imp'
+            ax[counter].plot(xs, self.tstep * ( np.cumsum(self.output[key1]) - np.cumsum(self.output[key2]) ), label='req - impl')
+            #ax[counter].plot(xs, self.tstep * np.cumsum(self.output[key2]), label='implemented')
+            ax[counter].set_title(name + ' total diff energy')
+            ax[counter].set_ylabel('kWh')
+            ax[counter].legend(loc=(1.01, .1))
+            counter += 1
+        ax[-1].set_xlabel('time step')
+        return fig
 
 
 class ControllerR2(object):
