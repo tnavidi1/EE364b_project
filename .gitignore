@@ -4,6 +4,7 @@ tmp/
 *.csv
 *.gz
 *.pkl
+*.npz
 
 # Compiled Python
 *.pyc
